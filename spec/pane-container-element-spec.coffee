@@ -2,30 +2,37 @@ PaneContainer = require '../src/pane-container'
 PaneAxisElement = require '../src/pane-axis-element'
 PaneAxis = require '../src/pane-axis'
 
+params =
+  location: 'center'
+  config: atom.config
+  confirm: atom.confirm.bind(atom)
+  viewRegistry: atom.views
+  applicationDelegate: atom.applicationDelegate
+
 describe "PaneContainerElement", ->
   describe "when panes are added or removed", ->
     it "inserts or removes resize elements", ->
       childTagNames = ->
         child.nodeName.toLowerCase() for child in paneAxisElement.children
 
-      paneAxis = new PaneAxis
-      paneAxisElement = new PaneAxisElement().initialize(paneAxis, atom)
+      paneAxis = new PaneAxis({}, atom.views)
+      paneAxisElement = paneAxis.getElement()
 
       expect(childTagNames()).toEqual []
 
-      paneAxis.addChild(new PaneAxis)
+      paneAxis.addChild(new PaneAxis({}, atom.views))
       expect(childTagNames()).toEqual [
         'atom-pane-axis'
       ]
 
-      paneAxis.addChild(new PaneAxis)
+      paneAxis.addChild(new PaneAxis({}, atom.views))
       expect(childTagNames()).toEqual [
         'atom-pane-axis'
         'atom-pane-resize-handle'
         'atom-pane-axis'
       ]
 
-      paneAxis.addChild(new PaneAxis)
+      paneAxis.addChild(new PaneAxis({}, atom.views))
       expect(childTagNames()).toEqual [
         'atom-pane-axis'
         'atom-pane-resize-handle'
@@ -42,12 +49,12 @@ describe "PaneContainerElement", ->
       ]
 
     it "transfers focus to the next pane if a focused pane is removed", ->
-      container = new PaneContainer(config: atom.config, confirm: atom.confirm.bind(atom))
-      containerElement = atom.views.getView(container)
+      container = new PaneContainer(params)
+      containerElement = container.getElement()
       leftPane = container.getActivePane()
-      leftPaneElement = atom.views.getView(leftPane)
+      leftPaneElement = leftPane.getElement()
       rightPane = leftPane.splitRight()
-      rightPaneElement = atom.views.getView(rightPane)
+      rightPaneElement = rightPane.getElement()
 
       jasmine.attachToDOM(containerElement)
       rightPaneElement.focus()
@@ -58,8 +65,8 @@ describe "PaneContainerElement", ->
 
   describe "when a pane is split", ->
     it "builds appropriately-oriented atom-pane-axis elements", ->
-      container = new PaneContainer(config: atom.config, confirm: atom.confirm.bind(atom))
-      containerElement = atom.views.getView(container)
+      container = new PaneContainer(params)
+      containerElement = container.getElement()
 
       pane1 = container.getActivePane()
       pane2 = pane1.splitRight()
@@ -67,25 +74,25 @@ describe "PaneContainerElement", ->
 
       horizontalPanes = containerElement.querySelectorAll('atom-pane-container > atom-pane-axis.horizontal > atom-pane')
       expect(horizontalPanes.length).toBe 1
-      expect(horizontalPanes[0]).toBe atom.views.getView(pane1)
+      expect(horizontalPanes[0]).toBe pane1.getElement()
 
       verticalPanes = containerElement.querySelectorAll('atom-pane-container > atom-pane-axis.horizontal > atom-pane-axis.vertical > atom-pane')
       expect(verticalPanes.length).toBe 2
-      expect(verticalPanes[0]).toBe atom.views.getView(pane2)
-      expect(verticalPanes[1]).toBe atom.views.getView(pane3)
+      expect(verticalPanes[0]).toBe pane2.getElement()
+      expect(verticalPanes[1]).toBe pane3.getElement()
 
       pane1.destroy()
       verticalPanes = containerElement.querySelectorAll('atom-pane-container > atom-pane-axis.vertical > atom-pane')
       expect(verticalPanes.length).toBe 2
-      expect(verticalPanes[0]).toBe atom.views.getView(pane2)
-      expect(verticalPanes[1]).toBe atom.views.getView(pane3)
+      expect(verticalPanes[0]).toBe pane2.getElement()
+      expect(verticalPanes[1]).toBe pane3.getElement()
 
   describe "when the resize element is dragged ", ->
     [container, containerElement] = []
 
     beforeEach ->
-      container = new PaneContainer(config: atom.config, confirm: atom.confirm.bind(atom))
-      containerElement = atom.views.getView(container)
+      container = new PaneContainer(params)
+      containerElement = container.getElement()
       document.querySelector('#jasmine-content').appendChild(containerElement)
 
     dragElementToPosition = (element, clientX) ->
@@ -142,11 +149,11 @@ describe "PaneContainerElement", ->
       )
       expectPaneScale [leftPane, 0.5], [middlePane, 0.75], [rightPane, 1.75]
 
-      middlePane.close()
-      expectPaneScale [leftPane, 0.44], [rightPane, 1.55]
+      waitsForPromise -> middlePane.close()
+      runs -> expectPaneScale [leftPane, 0.44], [rightPane, 1.55]
 
-      leftPane.close()
-      expectPaneScale [rightPane, 1]
+      waitsForPromise -> leftPane.close()
+      runs -> expectPaneScale [rightPane, 1]
 
     it "splits or closes panes in orthogonal direction that the pane is being dragged", ->
       leftPane = container.getActivePane()
@@ -165,9 +172,9 @@ describe "PaneContainerElement", ->
       lowerPane = leftPane.splitDown()
       expectPaneScale [lowerPane, 1], [leftPane, 1], [leftPane.getParent(), 0.5]
 
-      # dynamically close pane, the pane's flexscale will recorver to origin value
-      lowerPane.close()
-      expectPaneScale [leftPane, 0.5], [rightPane, 1.5]
+      # dynamically close pane, the pane's flexscale will recover to origin value
+      waitsForPromise -> lowerPane.close()
+      runs -> expectPaneScale [leftPane, 0.5], [rightPane, 1.5]
 
     it "unsubscribes from mouse events when the pane is detached", ->
       container.getActivePane().splitRight()
@@ -201,7 +208,7 @@ describe "PaneContainerElement", ->
     [leftPane, rightPane] = []
 
     beforeEach ->
-      container = new PaneContainer(config: atom.config, confirm: atom.confirm.bind(atom))
+      container = new PaneContainer(params)
       leftPane = container.getActivePane()
       rightPane = leftPane.splitRight()
 
@@ -210,11 +217,11 @@ describe "PaneContainerElement", ->
         expect(leftPane.getFlexScale()).toBe 1
         expect(rightPane.getFlexScale()).toBe 1
 
-        atom.commands.dispatch(atom.views.getView(leftPane), 'pane:increase-size')
+        atom.commands.dispatch(leftPane.getElement(), 'pane:increase-size')
         expect(leftPane.getFlexScale()).toBe 1.1
         expect(rightPane.getFlexScale()).toBe 1
 
-        atom.commands.dispatch(atom.views.getView(rightPane), 'pane:increase-size')
+        atom.commands.dispatch(rightPane.getElement(), 'pane:increase-size')
         expect(leftPane.getFlexScale()).toBe 1.1
         expect(rightPane.getFlexScale()).toBe 1.1
 
@@ -223,103 +230,37 @@ describe "PaneContainerElement", ->
         expect(leftPane.getFlexScale()).toBe 1
         expect(rightPane.getFlexScale()).toBe 1
 
-        atom.commands.dispatch(atom.views.getView(leftPane), 'pane:decrease-size')
+        atom.commands.dispatch(leftPane.getElement(), 'pane:decrease-size')
         expect(leftPane.getFlexScale()).toBe 1/1.1
         expect(rightPane.getFlexScale()).toBe 1
 
-        atom.commands.dispatch(atom.views.getView(rightPane), 'pane:decrease-size')
+        atom.commands.dispatch(rightPane.getElement(), 'pane:decrease-size')
         expect(leftPane.getFlexScale()).toBe 1/1.1
         expect(rightPane.getFlexScale()).toBe 1/1.1
 
-  describe "changing focus directionally between panes", ->
-    [containerElement, pane1, pane2, pane3, pane4, pane5, pane6, pane7, pane8, pane9] = []
+  describe "when only a single pane is present", ->
+    [singlePane] = []
 
     beforeEach ->
-      # Set up a grid of 9 panes, in the following arrangement, where the
-      # numbers correspond to the variable names below.
-      #
-      # -------
-      # |1|2|3|
-      # -------
-      # |4|5|6|
-      # -------
-      # |7|8|9|
-      # -------
+      container = new PaneContainer(params)
+      singlePane = container.getActivePane()
 
-      buildElement = (id) ->
-        element = document.createElement('div')
-        element.textContent = id
-        element.tabIndex = -1
-        element
+    describe "when pane:increase-size is triggered", ->
+      it "does not increases the size of the pane", ->
+        expect(singlePane.getFlexScale()).toBe 1
 
-      container = new PaneContainer(config: atom.config, confirm: atom.confirm.bind(atom))
-      pane1 = container.getActivePane()
-      pane1.activateItem(buildElement('1'))
-      pane4 = pane1.splitDown(items: [buildElement('4')])
-      pane7 = pane4.splitDown(items: [buildElement('7')])
+        atom.commands.dispatch(singlePane.getElement(), 'pane:increase-size')
+        expect(singlePane.getFlexScale()).toBe 1
 
-      pane2 = pane1.splitRight(items: [buildElement('2')])
-      pane3 = pane2.splitRight(items: [buildElement('3')])
+        atom.commands.dispatch(singlePane.getElement(), 'pane:increase-size')
+        expect(singlePane.getFlexScale()).toBe 1
 
-      pane5 = pane4.splitRight(items: [buildElement('5')])
-      pane6 = pane5.splitRight(items: [buildElement('6')])
+    describe "when pane:decrease-size is triggered", ->
+      it "does not decreases the size of the pane", ->
+        expect(singlePane.getFlexScale()).toBe 1
 
-      pane8 = pane7.splitRight(items: [buildElement('8')])
-      pane9 = pane8.splitRight(items: [buildElement('9')])
+        atom.commands.dispatch(singlePane.getElement(), 'pane:decrease-size')
+        expect(singlePane.getFlexScale()).toBe 1
 
-      containerElement = atom.views.getView(container)
-      containerElement.style.height = '400px'
-      containerElement.style.width = '400px'
-      jasmine.attachToDOM(containerElement)
-
-    describe "::focusPaneViewAbove()", ->
-      describe "when there are multiple rows above the focused pane", ->
-        it "focuses up to the adjacent row", ->
-          pane8.activate()
-          containerElement.focusPaneViewAbove()
-          expect(document.activeElement).toBe pane5.getActiveItem()
-
-      describe "when there are no rows above the focused pane", ->
-        it "keeps the current pane focused", ->
-          pane2.activate()
-          containerElement.focusPaneViewAbove()
-          expect(document.activeElement).toBe pane2.getActiveItem()
-
-    describe "::focusPaneViewBelow()", ->
-      describe "when there are multiple rows below the focused pane", ->
-        it "focuses down to the adjacent row", ->
-          pane2.activate()
-          containerElement.focusPaneViewBelow()
-          expect(document.activeElement).toBe pane5.getActiveItem()
-
-      describe "when there are no rows below the focused pane", ->
-        it "keeps the current pane focused", ->
-          pane8.activate()
-          containerElement.focusPaneViewBelow()
-          expect(document.activeElement).toBe pane8.getActiveItem()
-
-    describe "::focusPaneViewOnLeft()", ->
-      describe "when there are multiple columns to the left of the focused pane", ->
-        it "focuses left to the adjacent column", ->
-          pane6.activate()
-          containerElement.focusPaneViewOnLeft()
-          expect(document.activeElement).toBe pane5.getActiveItem()
-
-      describe "when there are no columns to the left of the focused pane", ->
-        it "keeps the current pane focused", ->
-          pane4.activate()
-          containerElement.focusPaneViewOnLeft()
-          expect(document.activeElement).toBe pane4.getActiveItem()
-
-    describe "::focusPaneViewOnRight()", ->
-      describe "when there are multiple columns to the right of the focused pane", ->
-        it "focuses right to the adjacent column", ->
-          pane4.activate()
-          containerElement.focusPaneViewOnRight()
-          expect(document.activeElement).toBe pane5.getActiveItem()
-
-      describe "when there are no columns to the right of the focused pane", ->
-        it "keeps the current pane focused", ->
-          pane6.activate()
-          containerElement.focusPaneViewOnRight()
-          expect(document.activeElement).toBe pane6.getActiveItem()
+        atom.commands.dispatch(singlePane.getElement(), 'pane:decrease-size')
+        expect(singlePane.getFlexScale()).toBe 1
